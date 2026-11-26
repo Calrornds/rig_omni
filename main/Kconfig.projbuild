@@ -29,6 +29,24 @@ config OTA_URL
           Overseas  -> https://xl-api.luwudynamics.ai/xiaolu/ota/
         Set a non-empty value to override the auto-selected URL.
 
+config WEBSOCKET_URL
+    string "WebSocket URL"
+    default ""
+    help
+        Audio channel WebSocket URL. NVS key "url" in namespace "websocket" wins when it is non-empty.
+
+config CF_ACCESS_CLIENT_ID
+    string "Cloudflare Access Client ID"
+    default ""
+    help
+        Sent as CF-Access-Client-Id on the WebSocket handshake when non-empty. OTA sends it only when the version-check host equals the WebSocket host. NVS key "cf_id" wins when non-empty.
+
+config CF_ACCESS_CLIENT_SECRET
+    string "Cloudflare Access Client Secret"
+    default ""
+    help
+        Sent as CF-Access-Client-Secret on the WebSocket handshake when non-empty. OTA sends it only when the version-check host equals the WebSocket host. NVS key "cf_secret" wins when non-empty.
+
 choice
     prompt "Flash Assets"
     default FLASH_DEFAULT_ASSETS if !USE_EMOTE_MESSAGE_STYLE

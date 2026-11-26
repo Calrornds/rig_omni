@@ -115,6 +115,9 @@ void McpServer::AddCommonTools() {
                 // Lower the priority to do the camera capture
                 TaskPriorityReset priority_reset(1);
 
+                if (!camera->IsEnabled()) {
+                    throw std::runtime_error("Camera is off");
+                }
                 if (!camera->Capture()) {
                     throw std::runtime_error("Failed to capture photo");
                 }
@@ -132,12 +135,33 @@ void McpServer::AddCommonTools() {
                 // Lower the priority to do the camera capture
                 TaskPriorityReset priority_reset(1);
 
+                if (!camera->IsEnabled()) {
+                    throw std::runtime_error("Camera is off");
+                }
                 if (!camera->Capture()) {
                     throw std::runtime_error("Failed to capture photo");
                 }
                 // 预览模式无需上传，立即归还帧缓冲防止相机缓冲区耗尽
                 camera->ReleaseFrame();
                 return true;
+            });
+
+        AddTool("self.camera.set_enabled",
+            "Turn the camera on or off. The camera stays off until enabled is true.\n"
+            "Args:\n"
+            "  `enabled`: true powers the camera on, false powers it off.\n"
+            "Return:\n"
+            "  true if the camera is on after the call.",
+            PropertyList({
+                Property("enabled", kPropertyTypeBoolean)
+            }),
+            [camera](const PropertyList& properties) -> ReturnValue {
+                camera->SetEnabled(properties["enabled"].value<bool>());
+                auto* display = Board::GetInstance().GetDisplay();
+                if (display != nullptr) {
+                    display->SetCameraIndicator(camera->IsEnabled());
+                }
+                return camera->IsEnabled();
             });
     }
 

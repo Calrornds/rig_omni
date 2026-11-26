@@ -272,7 +272,27 @@ void EspVideo::SetExplainUrl(const std::string& url, const std::string& token) {
     explain_token_ = token;
 }
 
+bool EspVideo::SetEnabled(bool enabled) {
+    if (enabled) {
+        if (enabled_) {
+            return true;
+        }
+        enabled_ = true;
+        return true;
+    }
+    enabled_ = false;
+    return false;
+}
+
+bool EspVideo::IsEnabled() const {
+    return enabled_;
+}
+
 bool EspVideo::Capture() {
+    if (!IsEnabled()) {
+        return false;
+    }
+
     if (encoder_thread_.joinable()) {
         encoder_thread_.join();
     }

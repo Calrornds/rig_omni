@@ -33,6 +33,7 @@ private:
     uint16_t sensor_height_ = 0;
 #endif  // CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
     int video_fd_ = -1;
+    bool enabled_ = false;
     bool streaming_on_ = false;
     struct MmapBuffer { void *start = nullptr; size_t length = 0; };
     std::vector<MmapBuffer> mmap_buffers_;
@@ -45,6 +46,8 @@ public:
     ~EspVideo();
 
     virtual void SetExplainUrl(const std::string& url, const std::string& token);
+    virtual bool SetEnabled(bool enabled) override;
+    virtual bool IsEnabled() const override;
     virtual bool Capture();
     // 翻转控制函数
     virtual bool SetHMirror(bool enabled) override;

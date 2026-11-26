@@ -47,6 +47,7 @@ public:
     virtual void SetPreviewRgb565(const void* data, int width, int height, int stride) {
         // 默认空实现，子类可重写
     }
+    virtual void SetCameraIndicator(bool) {}
 
     inline int width() const { return width_; }
     inline int height() const { return height_; }

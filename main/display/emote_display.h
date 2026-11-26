@@ -24,6 +24,7 @@ public:
     virtual void UpdateStatusBar(bool update_all = false) override;
     virtual void SetPowerSaveMode(bool on) override;
     virtual void SetPreviewRgb565(const void* data, int width, int height, int stride) override;
+    virtual void SetCameraIndicator(bool visible) override;
     virtual void SetPreviewImage(const void* image);
 
     bool StopAnimDialog();
@@ -40,6 +41,8 @@ private:
 
     emote_handle_t emote_handle_ = nullptr;
     gfx_obj_t* preview_obj_ = nullptr;  // 预览图像对象
+    gfx_obj_t* camera_indicator_ = nullptr;
+    bool camera_indicator_on_ = false;
     gfx_image_dsc_t preview_img_dsc_ = {};  // 预览图像描述符
     uint8_t* preview_data_ = nullptr;  // 预览数据副本
     size_t preview_data_size_ = 0;  // 预览数据大小

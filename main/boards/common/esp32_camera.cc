@@ -17,22 +17,61 @@
 
 #define TAG "Esp32Camera"
 
-Esp32Camera::Esp32Camera(const camera_config_t &config) {
-    esp_err_t err = esp_camera_init(&config);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_camera_init failed with error 0x%x", err);
-        return;
-    }
+Esp32Camera::Esp32Camera(const camera_config_t &config) : camera_config_(config) {
+#if !defined(CONFIG_BOARD_TYPE_PUPPY)
+    SetEnabled(true);
+#endif
+}
 
-    sensor_t *s = esp_camera_sensor_get();
-    if (s) {
-        if (s->id.PID == GC0308_PID) {
-            s->set_hmirror(s, 0); // Control camera mirror: 1 for mirror, 0 for normal
+bool Esp32Camera::SetEnabled(bool enabled) {
+    if (enabled) {
+        if (camera_enabled_) {
+            return true;
         }
-        ESP_LOGI(TAG, "Camera initialized: format=%d", config.pixel_format);
+        esp_err_t err = esp_camera_init(&camera_config_);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_camera_init failed with error 0x%x", err);
+            streaming_on_ = false;
+            camera_enabled_ = false;
+            return false;
+        }
+
+        sensor_t *s = esp_camera_sensor_get();
+        if (s) {
+            if (s->id.PID == GC0308_PID) {
+                s->set_hmirror(s, 0); // Control camera mirror: 1 for mirror, 0 for normal
+            }
+            ESP_LOGI(TAG, "Camera initialized: format=%d", camera_config_.pixel_format);
+        }
+
+        streaming_on_ = true;
+        camera_enabled_ = true;
+        return true;
     }
 
-    streaming_on_ = true;
+    if (!camera_enabled_ && !streaming_on_) {
+        return false;
+    }
+    if (current_fb_) {
+        esp_camera_fb_return(current_fb_);
+        current_fb_ = nullptr;
+    }
+    if (encode_buf_) {
+        heap_caps_free(encode_buf_);
+        encode_buf_ = nullptr;
+        encode_buf_size_ = 0;
+    }
+    if (streaming_on_) {
+        esp_camera_deinit();
+    }
+    streaming_on_ = false;
+    current_fb_ = nullptr;
+    camera_enabled_ = false;
+    return false;
+}
+
+bool Esp32Camera::IsEnabled() const {
+    return camera_enabled_;
 }
 
 Esp32Camera::~Esp32Camera() {
@@ -57,6 +96,10 @@ void Esp32Camera::SetExplainUrl(const std::string &url, const std::string &token
 }
 
 bool Esp32Camera::Capture() {
+    if (!IsEnabled()) {
+        return false;
+    }
+
     if (encoder_thread_.joinable()) {
         encoder_thread_.join();
     }

@@ -395,6 +395,34 @@ bool EmoteDisplay::InsertAnimDialog(const char* emoji_name, uint32_t duration_ms
     return false;
 }
 
+void EmoteDisplay::SetCameraIndicator(bool visible)
+{
+    camera_indicator_on_ = visible;
+    if (!emote_handle_) {
+        return;
+    }
+
+    if (!camera_indicator_) {
+        camera_indicator_ = emote_create_obj_by_type(emote_handle_, EMOTE_OBJ_TYPE_LABEL, "camera_on");
+        if (!camera_indicator_) {
+            return;
+        }
+        emote_lock(emote_handle_);
+        gfx_label_set_text(camera_indicator_, "CAM");
+        gfx_label_set_color(camera_indicator_, GFX_COLOR_HEX(0xFFFFFF));
+        gfx_label_set_bg_enable(camera_indicator_, true);
+        gfx_label_set_bg_color(camera_indicator_, GFX_COLOR_HEX(0x00C853));
+        gfx_obj_align(camera_indicator_, GFX_ALIGN_TOP_MID, 0, 4);
+        gfx_obj_set_visible(camera_indicator_, camera_indicator_on_);
+        emote_unlock(emote_handle_);
+        return;
+    }
+
+    emote_lock(emote_handle_);
+    gfx_obj_set_visible(camera_indicator_, camera_indicator_on_);
+    emote_unlock(emote_handle_);
+}
+
 void EmoteDisplay::RefreshAll()
 {
     if (emote_handle_) {

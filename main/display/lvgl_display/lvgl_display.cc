@@ -276,3 +276,16 @@ bool LvglDisplay::SnapshotToJpeg(std::string& jpeg_data, int quality) {
     return false;
 #endif
 }
+
+void LvglDisplay::SetCameraIndicator(bool visible) {
+    camera_indicator_on_ = visible;
+    if (camera_indicator_ == nullptr) {
+        return;
+    }
+    DisplayLockGuard lock(this);
+    if (visible) {
+        lv_obj_clear_flag(camera_indicator_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(camera_indicator_, LV_OBJ_FLAG_HIDDEN);
+    }
+}

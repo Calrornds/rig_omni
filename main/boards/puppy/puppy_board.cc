@@ -171,17 +171,6 @@ private:
         }
 
         camera_ = new Esp32Camera(camera_config);
-        
-        // 检查摄像头传感器是否成功初始化
-        sensor = esp_camera_sensor_get();
-        if (sensor != nullptr) {
-            ESP_LOGI(TAG, "Camera initialized successfully, sensor PID: 0x%x", sensor->id.PID);
-        } else {
-            ESP_LOGW(TAG, "Camera initialization failed, camera tools will not be available");
-            // 注意: 这里不删除 camera_ 以避免多态类型析构警告
-            // 内存泄漏量很小（对象本身很小），且只会发生一次
-            camera_ = nullptr;
-        }
     }
 
     void SetAngle(float a1, float a2, float a3, float a4, float a5, int t) {
@@ -279,6 +268,12 @@ private:
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting && !WifiManager::GetInstance().IsConnected()) {
                 EnterWifiConfigMode();
+            }
+            if (camera_ != nullptr && camera_->IsEnabled()) {
+                camera_->SetEnabled(false);
+                if (display_ != nullptr) {
+                    display_->SetCameraIndicator(false);
+                }
             }
             app.ToggleChatState();
         });

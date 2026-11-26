@@ -3,6 +3,7 @@
 #include "system_info.h"
 #include "application.h"
 #include "settings.h"
+#include "tunnel_access.h"
 
 #include <cstring>
 #include <cJSON.h>
@@ -82,8 +83,11 @@ void WebsocketProtocol::CloseAudioChannel(bool send_goodbye) {
 
 bool WebsocketProtocol::OpenAudioChannel() {
     Settings settings("websocket", false);
-    std::string url = settings.GetString("url");
-    std::string token = settings.GetString("token");
+    TunnelAccess access;
+    access.url = FirstNonEmpty(settings.GetString("url"), CONFIG_WEBSOCKET_URL);
+    access.token = settings.GetString("token");
+    access.client_id = FirstNonEmpty(settings.GetString("cf_id"), CONFIG_CF_ACCESS_CLIENT_ID);
+    access.client_secret = FirstNonEmpty(settings.GetString("cf_secret"), CONFIG_CF_ACCESS_CLIENT_SECRET);
     int version = settings.GetInt("version");
     if (version != 0) {
         version_ = version;
@@ -98,12 +102,8 @@ bool WebsocketProtocol::OpenAudioChannel() {
         return false;
     }
 
-    if (!token.empty()) {
-        // If token not has a space, add "Bearer " prefix
-        if (token.find(" ") == std::string::npos) {
-            token = "Bearer " + token;
-        }
-        websocket_->SetHeader("Authorization", token.c_str());
+    for (const auto& header : TunnelHandshakeHeaders(access)) {
+        websocket_->SetHeader(header.name.c_str(), header.value.c_str());
     }
     websocket_->SetHeader("Protocol-Version", std::to_string(version_).c_str());
     websocket_->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
@@ -172,8 +172,8 @@ bool WebsocketProtocol::OpenAudioChannel() {
         }
     });
 
-    ESP_LOGI(TAG, "Connecting to websocket server: %s with version: %d", url.c_str(), version_);
-    if (!websocket_->Connect(url.c_str())) {
+    ESP_LOGI(TAG, "Connecting to websocket server: %s with version: %d", access.url.c_str(), version_);
+    if (!websocket_->Connect(access.url.c_str())) {
         ESP_LOGE(TAG, "Failed to connect to websocket server, code=%d", websocket_->GetLastError());
         SetError(Lang::Strings::SERVER_NOT_CONNECTED());
         return false;
