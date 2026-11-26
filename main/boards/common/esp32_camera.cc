@@ -17,13 +17,31 @@
 
 #define TAG "Esp32Camera"
 
-Esp32Camera::Esp32Camera(const camera_config_t &config) : camera_config_(config) {
-#if !defined(CONFIG_BOARD_TYPE_PUPPY)
-    SetEnabled(true);
-#endif
+Esp32Camera::Esp32Camera(const camera_config_t &config) : camera_config_(config) {}
+
+void Esp32Camera::JoinEncoder() {
+    if (encoder_thread_.joinable()) {
+        encoder_thread_.join();
+    }
+}
+
+void Esp32Camera::ReleaseFrameUnlocked() {
+    if (current_fb_) {
+        esp_camera_fb_return(current_fb_);
+        current_fb_ = nullptr;
+    }
+}
+
+void Esp32Camera::FreeEncodeBuf() {
+    if (encode_buf_) {
+        heap_caps_free(encode_buf_);
+        encode_buf_ = nullptr;
+        encode_buf_size_ = 0;
+    }
 }
 
 bool Esp32Camera::SetEnabled(bool enabled) {
+    std::lock_guard<std::mutex> lock(mu_);
     if (enabled) {
         if (camera_enabled_) {
             return true;
@@ -38,9 +56,14 @@ bool Esp32Camera::SetEnabled(bool enabled) {
 
         sensor_t *s = esp_camera_sensor_get();
         if (s) {
+#if defined(CONFIG_BOARD_TYPE_ARM) || defined(CONFIG_BOARD_TYPE_TARS)
+            s->set_hmirror(s, 1);
+            s->set_vflip(s, 1);
+#else
             if (s->id.PID == GC0308_PID) {
                 s->set_hmirror(s, 0); // Control camera mirror: 1 for mirror, 0 for normal
             }
+#endif
             ESP_LOGI(TAG, "Camera initialized: format=%d", camera_config_.pixel_format);
         }
 
@@ -49,48 +72,31 @@ bool Esp32Camera::SetEnabled(bool enabled) {
         return true;
     }
 
-    if (encoder_thread_.joinable()) {
-        encoder_thread_.join();
-    }
+    JoinEncoder();
     if (!camera_enabled_ && !streaming_on_) {
         return false;
     }
-    if (current_fb_) {
-        esp_camera_fb_return(current_fb_);
-        current_fb_ = nullptr;
-    }
-    if (encode_buf_) {
-        heap_caps_free(encode_buf_);
-        encode_buf_ = nullptr;
-        encode_buf_size_ = 0;
-    }
+    ReleaseFrameUnlocked();
+    FreeEncodeBuf();
     if (streaming_on_) {
         esp_camera_deinit();
     }
     streaming_on_ = false;
-    current_fb_ = nullptr;
     camera_enabled_ = false;
     return false;
 }
 
 bool Esp32Camera::IsEnabled() const {
+    std::lock_guard<std::mutex> lock(mu_);
     return camera_enabled_;
 }
 
 Esp32Camera::~Esp32Camera() {
-    if (encoder_thread_.joinable()) {
-        encoder_thread_.join();
-    }
+    std::lock_guard<std::mutex> lock(mu_);
+    JoinEncoder();
     if (streaming_on_) {
-        if (current_fb_) {
-            esp_camera_fb_return(current_fb_);
-            current_fb_ = nullptr;
-        }
-        if (encode_buf_) {
-            heap_caps_free(encode_buf_);
-            encode_buf_ = nullptr;
-            encode_buf_size_ = 0;
-        }
+        ReleaseFrameUnlocked();
+        FreeEncodeBuf();
         esp_camera_deinit();
         streaming_on_ = false;
     }
@@ -102,13 +108,12 @@ void Esp32Camera::SetExplainUrl(const std::string &url, const std::string &token
 }
 
 bool Esp32Camera::Capture() {
-    if (!IsEnabled()) {
+    std::lock_guard<std::mutex> lock(mu_);
+    if (!camera_enabled_) {
         return false;
     }
 
-    if (encoder_thread_.joinable()) {
-        encoder_thread_.join();
-    }
+    JoinEncoder();
 
     if (!streaming_on_) {
         return false;
@@ -212,6 +217,7 @@ bool Esp32Camera::SetSwapBytes(bool enabled) {
 }
 
 std::string Esp32Camera::Explain(const std::string &question) {
+    std::lock_guard<std::mutex> lock(mu_);
     if (explain_url_.empty()) {
         throw std::runtime_error("Image explain URL or token is not set");
     }
@@ -305,7 +311,7 @@ std::string Esp32Camera::Explain(const std::string &question) {
     http->SetHeader("Transfer-Encoding", "chunked");
     if (!http->Open("POST", explain_url_)) {
         ESP_LOGE(TAG, "Failed to connect to explain URL");
-        encoder_thread_.join();
+        JoinEncoder();
         JpegChunk chunk;
         while (xQueueReceive(jpeg_queue, &chunk, portMAX_DELAY) == pdPASS) {
             if (chunk.data != nullptr) {
@@ -351,7 +357,7 @@ std::string Esp32Camera::Explain(const std::string &question) {
         total_sent += chunk.len;
         heap_caps_free(chunk.data);
     }
-    encoder_thread_.join();
+    JoinEncoder();
     vQueueDelete(jpeg_queue);
 
     if (!saw_terminator || total_sent == 0) {
@@ -379,22 +385,12 @@ std::string Esp32Camera::Explain(const std::string &question) {
              current_fb_->width, current_fb_->height, (int)total_sent, (int)remain_stack_size, question.c_str(), result.c_str());
 
     // 归还帧缓冲，防止相机缓冲区耗尽
-    ReleaseFrame();
+    ReleaseFrameUnlocked();
 
     return result;
 }
 
 void Esp32Camera::ReleaseFrame() {
-    if (current_fb_) {
-        esp_camera_fb_return(current_fb_);
-        current_fb_ = nullptr;
-    }
+    std::lock_guard<std::mutex> lock(mu_);
+    ReleaseFrameUnlocked();
 }
-
-#ifdef PUPPY_CAMERA_RELEASE_TEST
-void Esp32CameraTest_ArmEncoder(Esp32Camera* camera, std::thread worker, uint8_t* encode_buf, size_t size) {
-    camera->encode_buf_ = encode_buf;
-    camera->encode_buf_size_ = size;
-    camera->encoder_thread_ = std::move(worker);
-}
-#endif
