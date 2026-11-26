@@ -46,4 +46,7 @@ public:
     virtual bool SetVFlip(bool enabled) override;
     virtual bool SetSwapBytes(bool enabled) override;
     virtual std::string Explain(const std::string &question) override;
+#ifdef PUPPY_CAMERA_RELEASE_TEST
+    friend void Esp32CameraTest_ArmEncoder(Esp32Camera* camera, std::thread worker, uint8_t* encode_buf, size_t size);
+#endif
 };

@@ -402,23 +402,20 @@ void EmoteDisplay::SetCameraIndicator(bool visible)
         return;
     }
 
+    emote_lock(emote_handle_);
     if (!camera_indicator_) {
         camera_indicator_ = emote_create_obj_by_type(emote_handle_, EMOTE_OBJ_TYPE_LABEL, "camera_on");
         if (!camera_indicator_) {
+            emote_unlock(emote_handle_);
+            ESP_LOGE(TAG, "Failed to create camera indicator");
             return;
         }
-        emote_lock(emote_handle_);
         gfx_label_set_text(camera_indicator_, "CAM");
         gfx_label_set_color(camera_indicator_, GFX_COLOR_HEX(0xFFFFFF));
         gfx_label_set_bg_enable(camera_indicator_, true);
         gfx_label_set_bg_color(camera_indicator_, GFX_COLOR_HEX(0x00C853));
         gfx_obj_align(camera_indicator_, GFX_ALIGN_TOP_MID, 0, 4);
-        gfx_obj_set_visible(camera_indicator_, camera_indicator_on_);
-        emote_unlock(emote_handle_);
-        return;
     }
-
-    emote_lock(emote_handle_);
     gfx_obj_set_visible(camera_indicator_, camera_indicator_on_);
     emote_unlock(emote_handle_);
 }

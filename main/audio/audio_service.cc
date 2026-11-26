@@ -729,12 +729,22 @@ void AudioService::SetModelsList(srmodel_list_t* models_list) {
     models_list_ = models_list;
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_BOARD_TYPE_PUPPY
 #if CONFIG_USE_CUSTOM_WAKE_WORD
     wake_word_ = std::make_unique<CustomWakeWord>();
 #elif CONFIG_USE_AFE_WAKE_WORD
     wake_word_ = std::make_unique<AfeWakeWord>();
 #else
     wake_word_ = nullptr;
+#endif
+#else
+    if (esp_srmodel_filter(models_list_, ESP_MN_PREFIX, NULL) != nullptr) {
+        wake_word_ = std::make_unique<CustomWakeWord>();
+    } else if (esp_srmodel_filter(models_list_, ESP_WN_PREFIX, NULL) != nullptr) {
+        wake_word_ = std::make_unique<AfeWakeWord>();
+    } else {
+        wake_word_ = nullptr;
+    }
 #endif
 #else
     if (esp_srmodel_filter(models_list_, ESP_WN_PREFIX, NULL) != nullptr) {

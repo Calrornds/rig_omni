@@ -49,6 +49,9 @@ bool Esp32Camera::SetEnabled(bool enabled) {
         return true;
     }
 
+    if (encoder_thread_.joinable()) {
+        encoder_thread_.join();
+    }
     if (!camera_enabled_ && !streaming_on_) {
         return false;
     }
@@ -75,6 +78,9 @@ bool Esp32Camera::IsEnabled() const {
 }
 
 Esp32Camera::~Esp32Camera() {
+    if (encoder_thread_.joinable()) {
+        encoder_thread_.join();
+    }
     if (streaming_on_) {
         if (current_fb_) {
             esp_camera_fb_return(current_fb_);
@@ -384,3 +390,11 @@ void Esp32Camera::ReleaseFrame() {
         current_fb_ = nullptr;
     }
 }
+
+#ifdef PUPPY_CAMERA_RELEASE_TEST
+void Esp32CameraTest_ArmEncoder(Esp32Camera* camera, std::thread worker, uint8_t* encode_buf, size_t size) {
+    camera->encode_buf_ = encode_buf;
+    camera->encode_buf_size_ = size;
+    camera->encoder_thread_ = std::move(worker);
+}
+#endif
