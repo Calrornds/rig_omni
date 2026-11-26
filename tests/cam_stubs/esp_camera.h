@@ -1,7 +1,10 @@
 #pragma once
+#include <atomic>
+#include <chrono>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdexcept>
+#include <thread>
 #include "esp_heap_caps.h"
 #ifdef _MSC_VER
 #include <stdlib.h>
@@ -47,6 +50,10 @@ inline int g_camera_deinit_calls = 0;
 inline int g_camera_sensor_get_calls = 0;
 inline int g_camera_fb_get_calls = 0;
 inline int g_camera_fb_return_calls = 0;
+inline std::atomic<int> g_stall_deinit{0};
+inline std::atomic<int> g_deinit_stalled{0};
+inline std::atomic<int> g_release_deinit{0};
+inline std::atomic<int> g_sensor_get_during_deinit{0};
 inline bool g_fb_get_returns_frame = false;
 inline camera_fb_t g_host_fb{};
 inline uint8_t g_host_fb_buf[8]{};
@@ -57,9 +64,20 @@ inline esp_err_t esp_camera_init(const camera_config_t*) {
 }
 inline sensor_t* esp_camera_sensor_get(void) {
     g_camera_sensor_get_calls++;
+    if (g_deinit_stalled.load() != 0 && g_release_deinit.load() == 0) {
+        g_sensor_get_during_deinit.fetch_add(1);
+    }
     return nullptr;
 }
-inline void esp_camera_deinit(void) { g_camera_deinit_calls++; }
+inline void esp_camera_deinit(void) {
+    g_camera_deinit_calls++;
+    if (g_stall_deinit.exchange(0) == 1) {
+        g_deinit_stalled.store(1);
+        while (g_release_deinit.load() == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+}
 inline camera_fb_t* esp_camera_fb_get(void) {
     g_camera_fb_get_calls++;
     if (!g_fb_get_returns_frame) {

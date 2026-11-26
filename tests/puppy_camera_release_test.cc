@@ -1,3 +1,4 @@
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -91,6 +92,108 @@ static int FrameRace(Esp32Camera& camera, bool disable, const char* name) {
     return 0;
 }
 
+static int SawFlag(const std::atomic<int>& flag, int ms) {
+    for (int i = 0; i < ms; i++) {
+        if (flag.load() != 0) {
+            return 1;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return 0;
+}
+
+static int IsEnabledWhileUploadHoldsMu(Esp32Camera& camera, bool expect, const char* name) {
+    std::atomic<int> held{0};
+    std::atomic<int> release{0};
+    std::thread holder([&camera, &held, &release]() {
+        std::lock_guard<std::mutex> lock(camera.mu_);
+        held.store(1);
+        while (release.load() == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    if (!SawFlag(held, 2000)) {
+        release.store(1);
+        holder.join();
+        std::cout << "FAIL " << name << " never held mu_\n";
+        return 1;
+    }
+
+    std::atomic<int> done{0};
+    std::atomic<int> value{expect ? 0 : 1};
+    std::thread reader([&camera, &done, &value]() {
+        value.store(camera.IsEnabled() ? 1 : 0);
+        done.store(1);
+    });
+    int answered = SawFlag(done, 500);
+    release.store(1);
+    holder.join();
+    reader.join();
+    if (!answered || value.load() != (expect ? 1 : 0)) {
+        std::cout << "FAIL " << name << " blocked or returned the wrong value while mu_ is held\n";
+        return 1;
+    }
+    std::cout << "ok " << name << " answers while mu_ is held for a slow upload\n";
+    return 0;
+}
+
+static int MirrorSkipsSensorWhileDeinit(Esp32Camera& camera, bool mirror, const char* name) {
+    if (!camera.SetEnabled(true)) {
+        std::cout << "FAIL " << name << " setup could not enable the camera\n";
+        return 1;
+    }
+    int before = g_camera_sensor_get_calls;
+    g_stall_deinit.store(1);
+    g_deinit_stalled.store(0);
+    g_release_deinit.store(0);
+    g_sensor_get_during_deinit.store(0);
+
+    std::thread disabler([&camera]() { camera.SetEnabled(false); });
+    if (!SawFlag(g_deinit_stalled, 2000)) {
+        g_stall_deinit.store(0);
+        g_release_deinit.store(1);
+        disabler.join();
+        std::cout << "FAIL " << name << " never reached deinit\n";
+        return 1;
+    }
+
+    std::atomic<int> done{0};
+    std::thread caller([&camera, &done, mirror]() {
+        if (mirror) {
+            camera.SetHMirror(true);
+        } else {
+            camera.SetVFlip(true);
+        }
+        done.store(1);
+    });
+    int returned_during_deinit = SawFlag(done, 300);
+    g_release_deinit.store(1);
+    disabler.join();
+    caller.join();
+    g_stall_deinit.store(0);
+
+    if (returned_during_deinit || g_sensor_get_during_deinit.load() != 0 || g_camera_sensor_get_calls != before) {
+        std::cout << "FAIL " << name << " touched the sensor during deinit or skipped mu_\n";
+        return 1;
+    }
+    if (!camera.SetEnabled(true)) {
+        std::cout << "FAIL " << name << " could not enable the camera again\n";
+        return 1;
+    }
+    int enabled_before = g_camera_sensor_get_calls;
+    if (mirror) {
+        camera.SetHMirror(true);
+    } else {
+        camera.SetVFlip(true);
+    }
+    if (g_camera_sensor_get_calls != enabled_before + 1) {
+        std::cout << "FAIL " << name << " skipped the sensor while the camera is on\n";
+        return 1;
+    }
+    std::cout << "ok " << name << " waits out deinit and skips the sensor while off\n";
+    return 0;
+}
+
 int main() {
     std::cout << std::unitbuf;
     int failures = 0;
@@ -171,6 +274,28 @@ int main() {
         } else {
             failures += FrameRace(camera, true, "set_enabled");
         }
+    }
+
+    {
+        Esp32Camera camera(config);
+        failures += IsEnabledWhileUploadHoldsMu(camera, false, "is_enabled off");
+    }
+    {
+        Esp32Camera camera(config);
+        if (!camera.SetEnabled(true)) {
+            std::cout << "FAIL is_enabled on setup could not enable the camera\n";
+            failures++;
+        } else {
+            failures += IsEnabledWhileUploadHoldsMu(camera, true, "is_enabled on");
+        }
+    }
+    {
+        Esp32Camera camera(config);
+        failures += MirrorSkipsSensorWhileDeinit(camera, true, "set_hmirror");
+    }
+    {
+        Esp32Camera camera(config);
+        failures += MirrorSkipsSensorWhileDeinit(camera, false, "set_vflip");
     }
 
     if (failures != 0) {
