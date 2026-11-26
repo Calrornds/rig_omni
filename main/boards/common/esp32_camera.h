@@ -22,6 +22,8 @@ struct JpegChunk
 class Esp32Camera : public Camera
 {
 private:
+    camera_config_t camera_config_{};
+    bool camera_enabled_ = false;
     bool streaming_on_ = false;
     bool swap_bytes_enabled_ = true;  // Swap pixel byte order for RGB565, enabled by default
     std::string explain_url_;
@@ -36,10 +38,15 @@ public:
     ~Esp32Camera();
 
     virtual void SetExplainUrl(const std::string &url, const std::string &token) override;
+    virtual bool SetEnabled(bool enabled) override;
+    virtual bool IsEnabled() const override;
     virtual bool Capture() override;
     virtual void ReleaseFrame() override;
     virtual bool SetHMirror(bool enabled) override;
     virtual bool SetVFlip(bool enabled) override;
     virtual bool SetSwapBytes(bool enabled) override;
     virtual std::string Explain(const std::string &question) override;
+#ifdef PUPPY_CAMERA_RELEASE_TEST
+    friend void Esp32CameraTest_ArmEncoder(Esp32Camera* camera, std::thread worker, uint8_t* encode_buf, size_t size);
+#endif
 };

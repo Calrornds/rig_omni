@@ -23,6 +23,7 @@ public:
     virtual void SetPreviewImage(std::unique_ptr<LvglImage> image);
     virtual void UpdateStatusBar(bool update_all = false);
     virtual void SetPowerSaveMode(bool on);
+    virtual void SetCameraIndicator(bool visible) override;
     virtual bool SnapshotToJpeg(std::string& jpeg_data, int quality = 80);
 
 protected:
@@ -36,6 +37,8 @@ protected:
     lv_obj_t *battery_label_ = nullptr;
     lv_obj_t* low_battery_popup_ = nullptr;
     lv_obj_t* low_battery_label_ = nullptr;
+    lv_obj_t* camera_indicator_ = nullptr;
+    bool camera_indicator_on_ = false;
     
     const char* battery_icon_ = nullptr;
     const char* network_icon_ = nullptr;

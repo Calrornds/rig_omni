@@ -2,6 +2,7 @@
 #include "system_info.h"
 #include "settings.h"
 #include "assets/lang_config.h"
+#include "tunnel_access.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -71,6 +72,16 @@ std::unique_ptr<Http> Ota::SetupHttp() {
     http->SetHeader("User-Agent", user_agent);
     http->SetHeader("Accept-Language", Lang::CodeStr());
     http->SetHeader("Content-Type", "application/json");
+
+    Settings ws_settings("websocket", false);
+    TunnelAccess access;
+    access.url = FirstNonEmpty(ws_settings.GetString("url"), CONFIG_WEBSOCKET_URL);
+    access.token = ws_settings.GetString("token");
+    access.client_id = FirstNonEmpty(ws_settings.GetString("cf_id"), CONFIG_CF_ACCESS_CLIENT_ID);
+    access.client_secret = FirstNonEmpty(ws_settings.GetString("cf_secret"), CONFIG_CF_ACCESS_CLIENT_SECRET);
+    for (const auto& header : OtaTunnelHeaders(access, GetCheckVersionUrl())) {
+        http->SetHeader(header.name.c_str(), header.value.c_str());
+    }
 
     return http;
 }
