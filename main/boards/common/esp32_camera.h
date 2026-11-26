@@ -1,6 +1,7 @@
 #pragma once
 #include "sdkconfig.h"
 
+#include <atomic>
 #include <lvgl.h>
 #include <mutex>
 #include <thread>
@@ -24,7 +25,7 @@ class Esp32Camera : public Camera
 {
 private:
     camera_config_t camera_config_{};
-    bool camera_enabled_ = false;
+    std::atomic<bool> camera_enabled_{false};
     bool streaming_on_ = false;
     bool swap_bytes_enabled_ = true;  // Swap pixel byte order for RGB565, enabled by default
     std::string explain_url_;
@@ -33,7 +34,7 @@ private:
     camera_fb_t *current_fb_ = nullptr;
     uint8_t *encode_buf_ = nullptr;  // Buffer for JPEG encoding (with optional byte swap)
     size_t encode_buf_size_ = 0;
-    mutable std::mutex mu_;
+    std::mutex mu_;
 
     void JoinEncoder();
     void ReleaseFrameUnlocked();

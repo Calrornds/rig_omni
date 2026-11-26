@@ -87,8 +87,7 @@ bool Esp32Camera::SetEnabled(bool enabled) {
 }
 
 bool Esp32Camera::IsEnabled() const {
-    std::lock_guard<std::mutex> lock(mu_);
-    return camera_enabled_;
+    return camera_enabled_.load();
 }
 
 Esp32Camera::~Esp32Camera() {
@@ -194,6 +193,10 @@ bool Esp32Camera::Capture() {
 }
 
 bool Esp32Camera::SetHMirror(bool enabled) {
+    std::lock_guard<std::mutex> lock(mu_);
+    if (!camera_enabled_) {
+        return false;
+    }
     sensor_t *s = esp_camera_sensor_get();
     if (!s) {
         return false;
@@ -203,6 +206,10 @@ bool Esp32Camera::SetHMirror(bool enabled) {
 }
 
 bool Esp32Camera::SetVFlip(bool enabled) {
+    std::lock_guard<std::mutex> lock(mu_);
+    if (!camera_enabled_) {
+        return false;
+    }
     sensor_t *s = esp_camera_sensor_get();
     if (!s) {
         return false;
